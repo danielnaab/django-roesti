@@ -99,9 +99,18 @@ class HashedModelManager(models.Manager):
         return instances
 
 
+class HashField(models.CharField):
+    def __init__(self, **kwargs):
+        defaults = {
+            'max_length': 32
+        }
+        defaults.update(kwargs)
+        super(HashField, self).__init__(**defaults)
+
+
 class HashedModel(models.Model):
     objects = HashedModelManager()
-    content_hash = models.CharField(primary_key=True, max_length=32)
+    content_hash = HashField(primary_key=True)
 
     def save(self, *args, **kwargs):
         self.content_hash = self.get_content_hash()
@@ -137,3 +146,72 @@ class HashedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class HashedListModelManager(models.Manager):
+    def get_list(self, list_hash):
+        return self.filter(list_hash=list_hash)
+
+    @transaction.atomic
+    def ensure_list(self, ItemModel, items):
+        # Ensure the list items exist.
+        item_instances = ItemModel.objects._ensure_impl(items)
+
+        # Calculate the hash of this list as the hash of the list of its keys.
+        list_hash = make_hash([item.pk for item in item_instances])
+
+        # If this list already exists, return it.
+        lst = self.filter(pk=list_hash)
+        if len(lst) > 0:
+            return lst[0]
+
+        # Create the HashedList model instance...
+        lst_instance = self.create(pk=list_hash)
+
+        # ... and assign each of these list items to it with back references.
+        ListItemModel = self.model.items.field.model
+        items = ListItemModel.objects.ensure_items(list_hash, item_instances)
+
+        return lst_instance
+
+
+class HashedList(models.Model):
+    objects = HashedListModelManager()
+    list_hash = HashField(primary_key=True)
+
+    def __str__(self):
+        return self.list_hash
+
+
+class HashedListItemModelManager(HashedModelManager):
+    def get_list(self, list_hash):
+        return self.filter(list_hash=list_hash)
+
+    def ensure_items(self, list_hash, items):
+        return self.bulk_create([
+            self.model(
+                list_hash_id=list_hash,
+                order=order,
+                item=item
+            )
+            for order, item in enumerate(items, 1)
+        ])
+
+
+class HashedListItemModel(models.Model):
+    """
+    Implements a model that groups items in a list, with `list_hash` equal to a
+    hash of the list's references. The concrete class must define `item` and
+    `list_hash` fields.
+    """
+    objects = HashedListItemModelManager()
+
+    list_hash = models.ForeignKey(HashedList, related_name='items')
+    order = models.PositiveIntegerField()
+
+    # Set this field in the concrete class.
+    #item = models.ForeignKey(ListItemModel)
+
+    class Meta:
+        abstract = True
+        ordering = ('order',)

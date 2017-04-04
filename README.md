@@ -18,12 +18,29 @@ Pull requests welcome.
 
 A *Rösti* is a Swiss potato pancake, similar to hash browns. Get it?
 
-## Usage Example
+## Installation
+
+Install from PyPI:
+
+```bash
+pip install django-roesti
+```
+
+... and add to your `INSTALLED_APPS`:
+
+```python
+INSTALLED_APPS = [
+    # ...
+    'roesti',
+]
+```
+
+## Usage Examples
 
 Hashes are calculated from the fields specified in `hash_fields`. Foreign keys
 should be hashed on the ID value.
 
-Given these models:
+For example, given these models:
 
 ```python
 from roesti.models import HashedModel
@@ -44,7 +61,8 @@ class TestReferencesModel(HashedModel):
     integer_field_1 = models.IntegerField()
 ```
 
-You may confirm the existence of values in the database:
+You may create new or retrieve existing model instances with the `ensure`
+function. `ensure` accepts either dictionaries or model instances.
 
 ```python
 my_models = TestModel.objects.ensure([{
@@ -69,4 +87,24 @@ my_reference_models = TestReferencesModel.objects.ensure({
     },
     'integer_field_1': 3
 })
+```
+
+There is also a `HashedList` model for managing ordered lists of hashed items.
+To use, create the corresponding `HashedModel` and a mapping table:
+
+```python
+class TestItem(HashedModel):
+    hash_fields = ('text',)
+    text = models.TextField(blank=True, null=True)
+
+
+class TestListItem(HashedListItemModel):
+    item = models.ForeignKey(TestItem)
+
+
+items = [
+    TestItem(text='Item %d' % index)
+    for index in range(10)
+]
+my_list = HashedList.objects.ensure_list(TestItem, items)
 ```

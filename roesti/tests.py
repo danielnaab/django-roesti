@@ -1,7 +1,8 @@
 from django.db import models
 from django.test import TestCase
 
-from roesti.models import HashedModel, make_hash
+from roesti.models import (
+    HashedModel, HashedList, HashedListItemModel, make_hash)
 
 
 def validate_hashes(test_case, instances):
@@ -97,6 +98,7 @@ class HashedModelTestCase(TestCase):
             self.assertEqual(len(instances), 3)
             self.assertEqual(hashes, set(item.pk for item in instances))
             validate_hashes(self, instances)
+
 
 class TestReferencesModelTestCase(TestCase):
     def test_references_model_create_by_value(self):
@@ -238,3 +240,44 @@ class DeepHashDuplicateModelTestCase(TestCase):
             # have only been one inserted.
             self.assertEqual(len(instances), 1)
             validate_hashes(self, instances)
+
+
+class TestItem(HashedModel):
+    hash_fields = ('text',)
+    text = models.TextField(blank=True, null=True)
+
+
+class TestListItem(HashedListItemModel):
+    item = models.ForeignKey(TestItem)
+
+
+class TestListReference(HashedModel):
+    lst = models.ForeignKey(HashedList)
+
+
+class TestListModel(TestCase):
+    def test_list_items(self):
+        items = [
+            TestItem(text='Item %d' % index)
+            for index in range(10)
+        ]
+
+        # 2 queries for transaction
+        # 2 to verify list item existence and create them
+        # 1 to check for existing list
+        # 1 to create list
+        # 1 to bulk insert list/item mapping
+        # 1 extract for the `list_1.items.all()` query, below
+        with self.assertNumQueries(8):
+            list_1 = HashedList.objects.ensure_list(TestItem, items)
+            list_1_items = list_1.items.all()
+            self.assertEqual(len(list_1_items), 10)
+            for index, instance in enumerate(list_1_items):
+                self.assertEqual(instance.order, index + 1)
+
+        # Ensure the existing list.
+        # 2 queries for transaction, one to verify list items, one to check
+        # for existing list.
+        with self.assertNumQueries(4):
+            list_2 = HashedList.objects.ensure_list(TestItem, items)
+            self.assertEqual(list_1.pk, list_2.pk)
