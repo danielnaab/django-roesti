@@ -21,7 +21,7 @@ class TestReferencesModel(HashedModel):
     hash_fields = ['test_model_1_id', 'test_model_2_id', 'integer_field_1']
 
     test_model_1 = models.ForeignKey(TestModel)
-    test_model_2 = models.ForeignKey(TestModel)
+    test_model_2 = models.ForeignKey(TestModel, related_name='refs2')
     integer_field_1 = models.IntegerField()
 
 
@@ -30,7 +30,8 @@ class TestDeepReferencesModel(HashedModel):
                    'integer_field_1', 'char_field_1']
 
     test_references_model_1 = models.ForeignKey(TestReferencesModel)
-    test_references_model_2 = models.ForeignKey(TestReferencesModel)
+    test_references_model_2 = models.ForeignKey(TestReferencesModel,
+                                                related_name='refs2')
     integer_field_1 = models.IntegerField()
     char_field_1 = models.CharField(max_length=64)
 
@@ -41,9 +42,10 @@ class TestDeepReferencesDuplicateModel(HashedModel):
                    'integer_field_1', 'char_field_1']
 
     test_references_model_1 = models.ForeignKey(TestReferencesModel)
-    test_references_model_2 = models.ForeignKey(TestReferencesModel)
+    test_references_model_2 = models.ForeignKey(TestReferencesModel,
+                                                related_name='refs2_1')
     test_model_1 = models.ForeignKey(TestModel)
-    test_model_2 = models.ForeignKey(TestModel)
+    test_model_2 = models.ForeignKey(TestModel, related_name='testrefs2')
     integer_field_1 = models.IntegerField()
     char_field_1 = models.CharField(max_length=64)
 
