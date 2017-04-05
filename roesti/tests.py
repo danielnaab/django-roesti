@@ -1,6 +1,5 @@
 from django.db import models
 from django.test import TestCase
-from frozendict import frozendict
 
 from roesti.models import (
     HashedModel, HashedList, HashedListItemModel, make_hash)
@@ -299,11 +298,10 @@ class TestReverseReferences(TestCase):
     def test_reverse_references(self):
         with self.assertNumQueries(6):
             instances = TestBackrefModel.objects.ensure([{
-                # `items` is a related field set. Since it is unordered, we use a
-                # set to represent it just for clarity.
-                'items': set(frozendict({
+                # `items` is a related field set. Note that this is unordered.
+                'items': [{
                     'ref_text': 'Item %d' % index
-                }) for index in range(10))
+                } for index in range(10)]
             }])
         instances = list(instances)
         self.assertEqual(len(instances), 1)
