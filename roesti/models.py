@@ -46,7 +46,7 @@ class HashedModelManager(models.Manager):
 
         Returns list of model instances.
         """
-        return self._ensure_impl(items)
+        return list(self._ensure_impl(items))
 
     def _ensure_impl(self, items):
         """
@@ -64,7 +64,8 @@ class HashedModelManager(models.Manager):
                     related_model_mapping[key].update(related_instances)
                 instances.append(instance)
             elif isinstance(item, HashedModel):
-                item.content_hash = item.get_content_hash()
+                if not item.content_hash:
+                    item.content_hash = item.get_content_hash()
                 instances.append(item)
             else:
                 raise ValueError('Item must be a Mapping or HashedModel')
@@ -156,13 +157,12 @@ class HashedModel(models.Model):
         }
 
     def get_content_hash(self, reverse_relations={}):
-        #import pdb; pdb.set_trace()
         return make_hash(self._get_hash_field_dict(reverse_relations))
 
     def _accumulate_dict(self, target, source):
         if not source:
             return
-        for key, value in source:
+        for key, value in source.items():
             target[key].update(value)
 
     def set_dict(self, item_dict):

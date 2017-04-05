@@ -400,3 +400,21 @@ class OrderedListTestCase(TestCase):
         self.assertEqual(TestOrderedList.objects.count(), 4)
         self.assertEqual(TestItemDetails.objects.count(), 40)
         self.assertEqual(TestOrderedListItem.objects.count(), 40)
+
+        # Check content of items.
+        self.assertEqual(
+            set(TestOrderedList.objects.all().values_list('name', flat=True)),
+            set(['My list', 'My list 1', 'My list 2', 'My list 3'])
+        )
+        self.assertEqual(
+            set(TestOrderedListItem.objects.all().values_list('order', flat=True)),
+            set(range(10))
+        )
+        self.assertEqual(
+            set(TestItemDetails.objects.all().values_list('text', flat=True)),
+            set(
+                frmt % index
+                for index in range(10)
+                for frmt in ['Item %d', '1 Item %d', '2 Item %d', '3 Item %d']
+            )
+        )
