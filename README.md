@@ -89,8 +89,58 @@ my_reference_models = TestReferencesModel.objects.ensure({
 })
 ```
 
+Reverse relationships may be used to calculate the item's hash, and passed to
+the `ensure` method. For instance, this implements an ordered list of items.
+Note the use of `items` in `hash_fields` for `TestOrderedList`:
+
+```python
+class TestOrderedList(HashedModel):
+    hash_fields = ('name', 'items')
+    name = models.TextField()
+
+
+class TestItemDetails(HashedModel):
+    hash_fields = ('text',)
+    text = models.TextField()
+
+
+class TestOrderedListItem(HashedModel):
+    hash_fields = ('lst_id', 'order', 'details',)
+    lst = models.ForeignKey(TestOrderedList, related_name='items')
+    order = models.IntegerField()
+    details = models.ForeignKey(TestItemDetails)
+
+    instances = TestOrderedList.objects.ensure([{
+        'name': 'My list 1',
+        'items': [{
+            'order': index,
+            'details': {
+                'text': '1 Item %d' % index
+            }
+        } for index in range(10)]
+    }, {
+        'name': 'My list 2',
+        'items': [{
+            'order': index,
+            'details': {
+                'text': '2 Item %d' % index
+            }
+        } for index in range(10)]
+    }, {
+        'name': 'My list 3',
+        'items': [{
+            'order': index,
+            'details': {
+                'text': '3 Item %d' % index
+            }
+        } for index in range(10)]
+    }])
+```
+
 There is also a `HashedList` model for managing ordered lists of hashed items.
-To use, create the corresponding `HashedModel` and a mapping table:
+To use, create the corresponding `HashedModel` and a mapping table. Note that
+if you need to store references to the list in a `HasedModel`, as in the above
+example, you should not used `HashedList`.
 
 ```python
 class TestItem(HashedModel):

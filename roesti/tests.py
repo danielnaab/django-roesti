@@ -308,3 +308,95 @@ class TestReverseReferences(TestCase):
         instances = list(instances)
         self.assertEqual(len(instances), 1)
         self.assertEqual(len(instances[0].items.all()), 10)
+
+
+class TestOrderedList(HashedModel):
+    hash_fields = ('name', 'items')
+    name = models.TextField()
+
+
+class TestItemDetails(HashedModel):
+    hash_fields = ('text',)
+    text = models.TextField()
+
+
+class TestOrderedListItem(HashedModel):
+    hash_fields = ('lst_id', 'order', 'details',)
+    lst = models.ForeignKey(TestOrderedList, related_name='items')
+    order = models.IntegerField()
+    details = models.ForeignKey(TestItemDetails)
+
+
+class OrderedListTestCase(TestCase):
+    def test_reverse_references(self):
+        with self.assertNumQueries(8):
+            instances = TestOrderedList.objects.ensure([{
+                'name': 'My list',
+                'items': [{
+                    'order': index,
+                    'details': {
+                        'text': 'Item %d' % index
+                    }
+                } for index in range(10)]
+            }])
+        instances = list(instances)
+        self.assertEqual(len(instances), 1)
+        self.assertEqual(len(instances[0].items.all()), 10)
+
+        # Re-insert the same list.
+        with self.assertNumQueries(5):
+            instances = TestOrderedList.objects.ensure([{
+                'name': 'My list',
+                'items': [{
+                    'order': index,
+                    'details': {
+                        'text': 'Item %d' % index
+                    }
+                } for index in range(10)]
+            }])
+        instances = list(instances)
+        self.assertEqual(len(instances), 1)
+        self.assertEqual(len(instances[0].items.all()), 10)
+
+        # Ensure that nothing extra was added to the DB.
+        self.assertEqual(TestOrderedList.objects.count(), 1)
+        self.assertEqual(TestItemDetails.objects.count(), 10)
+        self.assertEqual(TestOrderedListItem.objects.count(), 10)
+
+        # Insert multiple lists
+        with self.assertNumQueries(8):
+            instances = TestOrderedList.objects.ensure([{
+                'name': 'My list 1',
+                'items': [{
+                    'order': index,
+                    'details': {
+                        'text': '1 Item %d' % index
+                    }
+                } for index in range(10)]
+            }, {
+                'name': 'My list 2',
+                'items': [{
+                    'order': index,
+                    'details': {
+                        'text': '2 Item %d' % index
+                    }
+                } for index in range(10)]
+            }, {
+                'name': 'My list 3',
+                'items': [{
+                    'order': index,
+                    'details': {
+                        'text': '3 Item %d' % index
+                    }
+                } for index in range(10)]
+            }])
+        instances = list(instances)
+        self.assertEqual(len(instances), 3)
+        self.assertEqual(len(instances[0].items.all()), 10)
+        self.assertEqual(len(instances[1].items.all()), 10)
+        self.assertEqual(len(instances[2].items.all()), 10)
+
+        # Ensure that nothing extra was added to the DB.
+        self.assertEqual(TestOrderedList.objects.count(), 4)
+        self.assertEqual(TestItemDetails.objects.count(), 40)
+        self.assertEqual(TestOrderedListItem.objects.count(), 40)

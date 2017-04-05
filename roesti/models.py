@@ -15,6 +15,10 @@ def freeze(obj):
     if isinstance(obj, list):
         return tuple(freeze(value) for value in obj)
 
+    # If a set, return the str representation.
+    if isinstance(obj, set):
+        return repr(obj)
+
     return obj
 
 
@@ -52,11 +56,12 @@ class HashedModelManager(models.Manager):
         # Normalize `items` into a list of model instances where the primary
         # key is properly set.
         instances = []
-        related_model_mapping = {}
+        related_model_mapping = collections.defaultdict(set)
         for item in items:
             if isinstance(item, collections.Mapping):
                 instance, related_models = self.from_dict(item)
-                related_model_mapping.update(related_models)
+                for key, related_instances in related_models.items():
+                    related_model_mapping[key].update(related_instances)
                 instances.append(instance)
             elif isinstance(item, HashedModel):
                 item.content_hash = item.get_content_hash()
@@ -131,25 +136,39 @@ class HashedModel(models.Model):
         self.content_hash = self.get_content_hash()
         super(HashedModel, self).save(*args, **kwargs)
 
-    def get_dict(self):
+    def _get_hash_field(self, field_name, reverse_relations):
+        value = getattr(self, field_name)
+
+        # If this is a related field manager, get the fields as an unordered
+        # set of the instance IDs (hashes).
+        if issubclass(value.__class__, models.Manager):
+            for (model, field), instances in reverse_relations.items():
+                if value.model == model and field == value.field.get_attname():
+                    value = set(instance.pk for instance in instances)
+                    break
+
+        return value
+
+    def _get_hash_field_dict(self, reverse_relations):
         return {
-            field_name: getattr(self, field_name)
+            field_name: self._get_hash_field(field_name, reverse_relations)
             for field_name in self.hash_fields
         }
 
-    def get_content_hash(self):
-        return make_hash(self.get_dict())
+    def get_content_hash(self, reverse_relations={}):
+        #import pdb; pdb.set_trace()
+        return make_hash(self._get_hash_field_dict(reverse_relations))
 
     def _accumulate_dict(self, target, source):
         if not source:
             return
         for key, value in source:
-            target[key].extend(value)
+            target[key].update(value)
 
     def set_dict(self, item_dict):
         # Will accumulate ManyToMany relations here, in the form:
         # {ModelClass: [instance1, instance2, ...]}
-        reverse_relations = collections.defaultdict(list)
+        reverse_relations = collections.defaultdict(set)
 
         for field_name, value in item_dict.items():
             field = self._meta.get_field(field_name)
@@ -175,7 +194,7 @@ class HashedModel(models.Model):
                     for item in value:
                         instance, related = RelatedModel.objects.from_dict(item)
                         key = (RelatedModel, field.remote_field.get_attname())
-                        reverse_relations[key].append(instance)
+                        reverse_relations[key].add(instance)
                         self._accumulate_dict(reverse_relations, related)
 
                     # Don't related fields on the instance itself.
@@ -186,11 +205,10 @@ class HashedModel(models.Model):
                 setattr(self, field_name, value)
 
         # Calculate the hash for this instance.
-        self.content_hash = self.get_content_hash()
+        self.content_hash = self.get_content_hash(reverse_relations)
 
         # Set all the back-references to this instance.
-        for model_and_field, instances in reverse_relations.items():
-            model, field_name = model_and_field
+        for (model, field_name), instances in reverse_relations.items():
             for instance in instances:
                 setattr(instance, field_name, self.content_hash)
 
