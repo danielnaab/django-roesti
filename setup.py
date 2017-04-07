@@ -60,7 +60,8 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Framework :: Django',
-        'Framework :: Django :: 1.9'
+        'Framework :: Django :: 1.9',
+        'Framework :: Django :: 1.10'
     ],
     cmdclass={'test': TestCommand},
 )

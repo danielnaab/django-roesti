@@ -15,9 +15,9 @@ def freeze(obj):
     if isinstance(obj, list):
         return tuple(freeze(value) for value in obj)
 
-    # If a set, return the str representation.
+    # If a set, return a sorted tuple.
     if isinstance(obj, set):
-        return repr(obj)
+        return tuple(sorted(obj))
 
     return obj
 
@@ -56,12 +56,12 @@ class HashedModelManager(models.Manager):
         # Normalize `items` into a list of model instances where the primary
         # key is properly set.
         instances = []
-        related_model_mapping = collections.defaultdict(set)
+        related_mapping = collections.defaultdict(set)
         for item in items:
             if isinstance(item, collections.Mapping):
                 instance, related_models = self.from_dict(item)
                 for key, related_instances in related_models.items():
-                    related_model_mapping[key].update(related_instances)
+                    related_mapping[key].update(related_instances)
                 instances.append(instance)
             elif isinstance(item, HashedModel):
                 if not item.content_hash:
@@ -73,8 +73,7 @@ class HashedModelManager(models.Manager):
         instances = self._do_insert(self.model, instances)
 
         # Now, insert all the instances that have back-references to this one.
-        for model_and_field, related_instances in related_model_mapping.items():
-            model, field_name = model_and_field
+        for (model, field_name), related_instances in related_mapping.items():
             self._do_insert(model, related_instances, skip_ensure=[self.model])
 
         return instances
@@ -114,8 +113,8 @@ class HashedModelManager(models.Manager):
         # If everything already is in the db, skip the empty `bulk_create`.
         if len(all_pks) > len(existing_pks):
             InsertModel.objects.bulk_create(instance
-                             for instance in instances
-                             if instance.pk not in existing_pks)
+                                            for instance in instances
+                                            if instance.pk not in existing_pks)
 
         return instances
 
@@ -197,7 +196,7 @@ class HashedModel(models.Model):
                         reverse_relations[key].add(instance)
                         self._accumulate_dict(reverse_relations, related)
 
-                    # Don't related fields on the instance itself.
+                    # Don't set related fields on the instance itself.
                     value = None
 
             # Set this value on the instance.
@@ -209,6 +208,11 @@ class HashedModel(models.Model):
 
         # Set all the back-references to this instance.
         for (model, field_name), instances in reverse_relations.items():
+            # If this set of relations doesn't refer to this model, skip.
+            field = model._meta.get_field(field_name)
+            if self.__class__ != field.rel.to:
+                continue
+
             for instance in instances:
                 setattr(instance, field_name, self.content_hash)
 
